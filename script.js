@@ -99,7 +99,7 @@ const formatPrice = (n) =>
   }).format(n);
 
 const brandLabel = (b) =>
-  ({ apple: "Apple", samsung: "Samsung", xiaomi: "Xiaomi" }[b] || b);
+  ({ iphone: "iPhone", samsung: "Samsung", xiaomi: "Xiaomi" }[b] || b);
 
 const prefersReducedMotion = () =>
   typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -557,12 +557,12 @@ function initProductDetailPage() {
   const v0 = getDefaultVariantSelection(p);
 
   document.title = `${p.name} | Rio Store`;
-  const mainUrl = pdpAsset((v0.color && v0.color.photo) || p.photo);
+  const mainUrl = pdpAsset(p.photo);
   const hoverUrl = p.photoHover ? pdpAsset(p.photoHover) : null;
   const highlights = (p.highlights || []).map((t) => `<li>${escapeHtml(t)}</li>`).join("");
 
   const thumbs = [
-    `<button type="button" class="pdp-thumb is-active" data-kind="main" data-src="${mainUrl}" aria-label="Ảnh 1"><img src="${mainUrl}" alt="" width="80" height="80" loading="lazy" decoding="async" /></button>`,
+    `<button type="button" class="pdp-thumb is-active" data-src="${mainUrl}" aria-label="Ảnh 1"><img src="${mainUrl}" alt="" width="80" height="80" loading="lazy" decoding="async" /></button>`,
   ];
   if (hoverUrl) {
     thumbs.push(
@@ -699,49 +699,36 @@ function initProductDetailPage() {
     return storages.find((s) => s.gb === selGb) || storages[0];
   }
 
-  function setMainPhoto(nextSrc) {
-    const mainImg = document.getElementById("pdpMainImg");
-    if (!mainImg || !nextSrc) return;
-
-    const mainThumbBtn = mount.querySelector('.pdp-thumb[data-kind="main"]');
-    const mainThumbImg = mainThumbBtn ? mainThumbBtn.querySelector("img") : null;
-
-    const cur = mainImg.getAttribute("src");
-    if (cur !== nextSrc) {
-      const onLoaded = () => {
-        mainImg.style.opacity = "";
-        mainImg.style.transition = "";
-      };
-      if (!prefersReducedMotion()) {
-        mainImg.style.transition = "opacity 0.2s ease";
-        mainImg.style.opacity = "0.65";
-        mainImg.addEventListener("load", onLoaded, { once: true });
-      }
-      mainImg.src = nextSrc;
-      if (prefersReducedMotion()) onLoaded();
-    }
-
-    if (mainThumbBtn) {
-      mainThumbBtn.dataset.src = nextSrc;
-      if (mainThumbImg) mainThumbImg.src = nextSrc;
-      mount.querySelectorAll(".pdp-thumb").forEach((b) => b.classList.remove("is-active"));
-      mainThumbBtn.classList.add("is-active");
-    }
-  }
-
   function paintVariant() {
     const s = currentStorage();
     const col = s.colors.find((c) => c.key === selColorKey) || s.colors[0];
     selColorKey = col.key;
     const v = resolveVariantInner(p, s, col);
+     document.getElementById("pdpPrice").textContent = formatPrice(v.price);
+  document.getElementById("pdpSku").textContent = v.sku;
+  document.getElementById("pdpVariantLabel").textContent = v.label;
+
+  // 👉 THÊM ĐOẠN NÀY
+  if (mainImg) {
+    const nextImg = col.img || p.photo;
+
+    if (!prefersReducedMotion()) {
+      mainImg.style.transition = "opacity 0.2s ease";
+      mainImg.style.opacity = "0.6";
+      mainImg.onload = () => {
+        mainImg.style.opacity = "1";
+      };
+    }
+
+    mainImg.src = pdpAsset(nextImg);
+  }
+
     const priceEl = document.getElementById("pdpPrice");
     const skuEl = document.getElementById("pdpSku");
     const labelEl = document.getElementById("pdpVariantLabel");
     if (priceEl) priceEl.textContent = formatPrice(v.price);
     if (skuEl) skuEl.textContent = v.sku;
     if (labelEl) labelEl.textContent = v.label;
-
-    setMainPhoto(pdpAsset(col.photo || p.photo));
 
     mount.querySelectorAll(".pdp-storage-btn").forEach((b) => {
       const g = b.dataset.gb === "" ? null : Number(b.dataset.gb);
@@ -1090,3 +1077,5 @@ if (menuToggle && nav) {
     a.addEventListener("click", () => nav.classList.remove("is-open"));
   });
 }
+
+

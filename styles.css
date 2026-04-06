@@ -963,7 +963,7 @@ a.logo.logo--brand:hover .logo__text > span {
 
 .product-card__media {
   position: relative;
-  aspect-ratio: 4/3;
+  aspect-ratio: 1/1;
   overflow: hidden;
   background: linear-gradient(160deg, #1c2433 0%, #12161c 55%, #0d1016 100%);
 }
@@ -1560,10 +1560,14 @@ a.product-card__media {
   font-size: 1rem;
 }
 
-/* Trang chi tiết (kiểu cửa hàng điện thoại) */
+
 .pdp-root {
   padding: 1.25rem 0 3rem;
   min-height: 60vh;
+}
+.pdp-thumb img {
+  width: 72px;
+  height: 72px;
 }
 
 .breadcrumb {
@@ -1775,6 +1779,49 @@ a.product-card__media {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.pdp-color-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+  position: relative;
+  touch-action: pan-x;
+  cursor: grab;
+}
+
+.pdp-color-row.is-dragging {
+  cursor: grabbing;
+}
+
+.pdp-color-row > .pdp-color-btn {
+  scroll-snap-align: start;
+  flex: 0 0 auto;
+}
+
+.pdp-color-row::before,
+.pdp-color-row::after {
+  content: "";
+  position: sticky;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.pdp-color-row::before {
+  left: 0;
+  background: linear-gradient(90deg, rgba(15, 18, 24, 0.95) 0%, rgba(15, 18, 24, 0) 100%);
+}
+
+.pdp-color-row::after {
+  right: 0;
+  background: linear-gradient(270deg, rgba(15, 18, 24, 0.95) 0%, rgba(15, 18, 24, 0) 100%);
 }
 
 .pdp-storage-btn {
@@ -2090,6 +2137,7 @@ a.product-card__media {
   color: var(--text-soft);
   text-decoration: none;
 }
+
 
 .footer__col a:hover {
   color: var(--accent);

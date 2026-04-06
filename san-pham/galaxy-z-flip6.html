@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Samsung Galaxy Z Flip6 chính hãng — máy gập FlexCam, pin cải tiến, bản lề bền. Rio Store: trả góp 0%, giao nhanh, bảo hành 12 tháng." />
+  <title>Samsung Galaxy Z Flip6 | Rio Store</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/jpeg" href="../images/logo.jpg" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="../index.html" class="logo logo--brand">
+        <img src="../images/logo.jpg" alt="Rio Store" class="logo__mark" width="40" height="40" decoding="async" />
+        <span class="logo__text">Rio<span>Store</span></span>
+      </a>
+      <nav class="nav" id="nav">
+        <a href="../index.html#san-pham">Sản phẩm</a>
+        <a href="../index.html#khuyen-mai">Khuyến mãi</a>
+        <a href="../chinh-sach/bao-hanh.html">Bảo hành</a>
+        <a href="../gioi-thieu.html">Giới thiệu</a>
+        <a href="../index.html#lien-he">Liên hệ</a>
+      </nav>
+      <div class="header__actions">
+        <div class="header__auth" id="authHeader">
+          <div class="header__auth-btns">
+            <button type="button" class="btn-text" id="loginOpenBtn">Đăng nhập</button>
+            <button type="button" class="btn-text btn-text--secondary" id="registerOpenBtn">Đăng ký</button>
+          </div>
+        </div>
+        <button type="button" class="btn-icon cart-toggle" aria-label="Giỏ hàng" id="cartToggle">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <path d="M16 10a4 4 0 01-8 0" />
+          </svg>
+          <span class="cart-badge" id="cartBadge">0</span>
+        </button>
+        <button type="button" class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="pdp-root" data-product-slug="galaxy-z-flip6">
+    <div id="pdpMount"></div>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer__top">
+      <div class="footer__col">
+        <a href="../index.html" class="logo logo--footer">
+          <img src="../images/logo.jpg" alt="Rio Store Logo" class="logo__mark" width="36" height="36" />
+          <span class="logo__text">Rio<span>Store</span></span>
+        </a>
+        <p>Hệ thống bán lẻ điện thoại di động chính hãng uy tín hàng đầu Việt Nam. Cam kết chất lượng và dịch vụ tốt nhất.</p>
+        <p>Hotline: <a href="tel:0707937555">0707 937 555</a></p>
+      </div>
+      <div class="footer__col">
+        <h4>Chính sách</h4>
+        <ul>
+          <li><a href="../chinh-sach/bao-hanh.html">Bảo hành</a></li>
+          <li><a href="../chinh-sach/doi-tra.html">Đổi trả</a></li>
+          <li><a href="../chinh-sach/van-chuyen.html">Vận chuyển</a></li>
+          <li><a href="../chinh-sach/thanh-toan.html">Thanh toán</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h4>Hỗ trợ khách hàng</h4>
+        <ul>
+          <li><a href="../index.html#san-pham">Mua hàng</a></li>
+          <li><a href="../chinh-sach/thanh-toan.html">Thanh toán</a></li>
+          <li><a href="../index.html#lien-he">Liên hệ</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h4>Thông tin</h4>
+        <ul>
+          <li><a href="../gioi-thieu.html">Giới thiệu</a></li>
+          <li><a href="../index.html#khuyen-mai">Khuyến mãi</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer__bottom">
+      <p>© 2026 RioStore</p>
+    </div>
+  </footer>
+
+  <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+    <div class="cart-drawer__overlay" id="cartOverlay"></div>
+    <div class="cart-drawer__panel">
+      <div class="cart-drawer__head">
+        <h3>Giỏ hàng <span class="cart-drawer__count" id="cartDrawerCount"></span></h3>
+        <div class="cart-drawer__head-actions">
+          <button type="button" class="cart-clear" id="cartClearBtn" hidden>Xóa tất cả</button>
+          <button type="button" class="btn-close" id="cartClose" aria-label="Đóng">×</button>
+        </div>
+      </div>
+      <ul class="cart-list" id="cartList"></ul>
+      <div class="cart-drawer__foot">
+        <div class="cart-ship" id="cartShipRow">
+          <span>Phí vận chuyển</span>
+          <strong id="cartShipFee">0 ₫</strong>
+        </div>
+        <p class="cart-ship-hint" id="cartShipHint"></p>
+        <p class="cart-total">Tạm tính: <strong id="cartSubtotal">0 ₫</strong></p>
+        <p class="cart-grand">Tổng cộng: <strong id="cartTotal">0 ₫</strong></p>
+        <button type="button" class="btn btn--primary btn--block" id="checkoutBtn">Thanh toán</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="toast-host" id="toastHost" aria-live="polite"></div>
+
+  <div class="auth-modal" id="loginModal" aria-hidden="true">
+    <div class="auth-modal__overlay" id="loginOverlay"></div>
+    <div class="auth-modal__dialog" role="dialog" aria-labelledby="loginTitle" aria-modal="true">
+      <button type="button" class="btn-close auth-modal__close" id="loginClose" aria-label="Đóng">×</button>
+      <h2 class="auth-modal__title" id="loginTitle">Đăng nhập</h2>
+      <p class="auth-modal__note">Chỉ giao diện: không lưu dữ liệu, không cơ sở dữ liệu hay server.</p>
+      <form class="auth-form" id="formLogin" novalidate>
+        <label class="auth-field">
+          <span>Email</span>
+          <input type="email" name="email" autocomplete="email" required placeholder="ban@email.com" />
+        </label>
+        <label class="auth-field">
+          <span>Mật khẩu</span>
+          <input type="password" name="password" autocomplete="current-password" required minlength="6" placeholder="••••••" />
+        </label>
+        <p class="auth-error" id="loginError" hidden></p>
+        <button type="submit" class="btn btn--primary btn--block">Đăng nhập</button>
+      </form>
+      <p class="auth-alt">
+        Chưa có tài khoản?
+        <button type="button" class="auth-alt__link" id="loginToRegister">Đăng ký</button>
+      </p>
+    </div>
+  </div>
+
+  <div class="auth-modal" id="registerModal" aria-hidden="true">
+    <div class="auth-modal__overlay" id="registerOverlay"></div>
+    <div class="auth-modal__dialog" role="dialog" aria-labelledby="registerTitle" aria-modal="true">
+      <button type="button" class="btn-close auth-modal__close" id="registerClose" aria-label="Đóng">×</button>
+      <h2 class="auth-modal__title" id="registerTitle">Đăng ký</h2>
+      <p class="auth-modal__note">Chỉ giao diện: không lưu dữ liệu, không cơ sở dữ liệu hay server.</p>
+      <form class="auth-form" id="formRegister" novalidate>
+        <label class="auth-field">
+          <span>Họ tên</span>
+          <input type="text" name="name" autocomplete="name" required minlength="2" placeholder="Nguyễn Văn A" />
+        </label>
+        <label class="auth-field">
+          <span>Email</span>
+          <input type="email" name="email" autocomplete="email" required placeholder="ban@email.com" />
+        </label>
+        <label class="auth-field">
+          <span>Mật khẩu</span>
+          <input type="password" name="password" autocomplete="new-password" required minlength="6" placeholder="Tối thiểu 6 ký tự" />
+        </label>
+        <p class="auth-error" id="registerError" hidden></p>
+        <button type="submit" class="btn btn--primary btn--block">Tạo tài khoản</button>
+      </form>
+      <p class="auth-alt">
+        Đã có tài khoản?
+        <button type="button" class="auth-alt__link" id="registerToLogin">Đăng nhập</button>
+      </p>
+    </div>
+  </div>
+
+  <script src="../products.js"></script>
+  <script src="../script.js"></script>
+</body>
+</html>

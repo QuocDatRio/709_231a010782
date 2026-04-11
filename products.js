@@ -20,7 +20,7 @@ var PHONE_PRODUCTS = [
         gb: 256,
         price: 36990000,
         colors: [
-          { key: "blue", name: "bule", hex: "#2b2b50", img: "images/ip17prmblue.jpg" },
+          { key: "blue", name: "Titan xanh biển", hex: "#2b2b50", img: "images/ip17prmblue.jpg" },
           { key: "white", name: "Titan trắng", hex: "#f5f5f7", img: "images/ip17prmw.jpg" },
           { key: "orange", name: "Titan cam", hex: "#f9a825", img: "images/ip17prm.jpg" },
         ],
@@ -29,7 +29,7 @@ var PHONE_PRODUCTS = [
         gb: 512,
         price: 41990000,
         colors: [
-          { key: "blue", name: "bule", hex: "#2b2b50", img: "images/ip17prmblue.jpg" },
+          { key: "blue", name: "Titan xanh biển", hex: "#2b2b50", img: "images/ip17prmblue.jpg" },
           { key: "white", name: "Titan trắng", hex: "#f5f5f7", img: "images/ip17prmw.jpg" },
           { key: "orange", name: "Titan cam", hex: "#f9a825", img: "images/ip17prm.jpg" },
         ],

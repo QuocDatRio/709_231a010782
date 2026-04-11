@@ -13,7 +13,26 @@ function ensureStorages(p) {
   };
 }
 
-const products = (typeof PHONE_PRODUCTS !== "undefined" ? PHONE_PRODUCTS : []).map(ensureStorages);
+function normalizeColorPhoto(c) {
+  const photo = c.photo || c.img;
+  return photo ? { ...c, photo } : { ...c };
+}
+
+function normalizeProductStorages(p) {
+  const base = ensureStorages(p);
+  if (!base.storages || !base.storages.length) return base;
+  return {
+    ...base,
+    storages: base.storages.map((s) => ({
+      ...s,
+      colors: (s.colors || []).map(normalizeColorPhoto),
+    })),
+  };
+}
+
+const products = (typeof PHONE_PRODUCTS !== "undefined" ? PHONE_PRODUCTS : [])
+  .map(ensureStorages)
+  .map(normalizeProductStorages);
 
 function storageLabelGb(gb) {
   if (gb == null || gb === "") return "";
@@ -50,7 +69,7 @@ function variantLabelText(storage, color) {
 }
 
 function resolveVariantInner(p, storage, color) {
-  const photo = color.photo || p.photo;
+  const photo = color.photo || color.img || p.photo;
   return {
     storageGb: storage.gb,
     colorKey: color.key,
@@ -99,19 +118,43 @@ const formatPrice = (n) =>
   }).format(n);
 
 const brandLabel = (b) =>
-  ({ iphone: "iPhone", samsung: "Samsung", xiaomi: "Xiaomi" }[b] || b);
+  ({
+    apple: "Apple",
+    iphone: "iPhone",
+    samsung: "Samsung",
+    xiaomi: "Xiaomi",
+    oppo: "OPPO",
+  }[b] || b);
+
+/** Chuẩn hóa khóa lọc (UI cũ dùng "apple", dữ liệu sản phẩm dùng "iphone"). */
+function canonicalBrandKey(f) {
+  if (!f || f === "all") return "all";
+  if (f === "apple") return "iphone";
+  return String(f).toLowerCase();
+}
+
+const BRAND_FILTER_STORAGE_KEY = "phonestore_brand_filter";
+
+function syncBrandTilesUI() {
+  const canon = canonicalBrandKey(brandFilter);
+  document.querySelectorAll("[data-brand-jump]").forEach((el) => {
+    const j = canonicalBrandKey(el.dataset.brandJump);
+    el.classList.toggle("is-active", j === canon);
+  });
+}
 
 const prefersReducedMotion = () =>
   typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   
 const FREE_SHIP_THRESHOLD = 2000000;
 const SHIP_FEE = 30000;
-const CART_SESSION_KEY = "phonestore_cart_session";
+const CART_STORAGE_KEY = "phonestore_cart_v1";
+const CART_LEGACY_SESSION_KEY = "phonestore_cart_session";
 
 
 let cart = [];
 let sessionUser = null;
-let brandFilter = "all";
+let brandFilter = canonicalBrandKey("all");
 let searchQuery = "";
 let heroRotateIndex = 0;
 let statsAnimated = false;
@@ -175,20 +218,49 @@ function cartThumbForProduct(p) {
   return cartThumbFromPhoto(p.photo);
 }
 
+function cartProductHref(slug) {
+  if (!slug) return "";
+  const base = `san-pham/${slug}.html`;
+  return needsAssetParent() ? `../${base}` : base;
+}
+
 function loadCart() {
   try {
-    const raw = sessionStorage.getItem(CART_SESSION_KEY);
+    let raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) {
+      const legacy = sessionStorage.getItem(CART_LEGACY_SESSION_KEY);
+      if (legacy) {
+        raw = legacy;
+        try {
+          localStorage.setItem(CART_STORAGE_KEY, legacy);
+        } catch {
+          /* ignore */
+        }
+        try {
+          sessionStorage.removeItem(CART_LEGACY_SESSION_KEY);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     cart = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(cart)) cart = [];
     cart = cart.map((c) => {
-      if (c.lineId != null) return c;
-      const pid = String(c.id);
-      return {
-        ...c,
-        lineId: pid,
-        productId: c.productId || pid,
-        variantLabel: c.variantLabel || "",
-      };
+      let next = c;
+      if (c.lineId == null) {
+        const pid = String(c.id);
+        next = {
+          ...c,
+          lineId: pid,
+          productId: c.productId || pid,
+          variantLabel: c.variantLabel || "",
+        };
+      }
+      if (!next.slug && next.productId) {
+        const pd = products.find((x) => x.id === String(next.productId));
+        if (pd) next = { ...next, slug: pd.slug };
+      }
+      return next;
     });
   } catch {
     cart = [];
@@ -197,9 +269,13 @@ function loadCart() {
 
 function saveCart() {
   try {
-    sessionStorage.setItem(CART_SESSION_KEY, JSON.stringify(cart));
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
   } catch {
-  
+    try {
+      sessionStorage.setItem(CART_LEGACY_SESSION_KEY, JSON.stringify(cart));
+    } catch {
+      /* ignore */
+    }
   }
   updateCartUI();
 }
@@ -240,6 +316,7 @@ function addToCart(productId, selection) {
     cart.push({
       lineId,
       productId: p.id,
+      slug: p.slug,
       name: p.name,
       variantLabel: v.label,
       price: v.price,
@@ -251,6 +328,7 @@ function addToCart(productId, selection) {
   saveCart();
   pulseBadge();
   showToast(`Đã thêm «${p.name}» (${v.label}) vào giỏ`);
+  openCart();
 }
 
 function removeFromCart(lineId) {
@@ -301,10 +379,11 @@ function cartTotal() {
 
 function syncProductVisibility() {
   const q = searchQuery.trim().toLowerCase();
+  const f = canonicalBrandKey(brandFilter);
   document.querySelectorAll(".product-card").forEach((card) => {
-    const b = card.dataset.brand;
+    const b = String(card.dataset.brand || "").toLowerCase();
     const slug = (card.dataset.search || "").toLowerCase();
-    const brandOk = brandFilter === "all" || b === brandFilter;
+    const brandOk = f === "all" || b === f;
     const searchOk = !q || slug.includes(q);
     card.classList.toggle("hidden", !(brandOk && searchOk));
   });
@@ -327,6 +406,7 @@ function renderProducts() {
           <div class="product-card__body">
             <p class="product-card__brand">${brandLabel(p.brand)}</p>
             <h3><a class="product-card__title-link" href="san-pham/${p.slug}.html">${p.name}</a></h3>
+            <p class="product-card__meta">Trả góp 0% · Giao nhanh · Bảo hành chính hãng</p>
             <p class="product-card__price">${
               productHasVariantUI(p)
                 ? `<span class="product-card__price-from">Chỉ từ</span> ${formatPrice(productMinPrice(p))}`
@@ -350,10 +430,16 @@ function renderProducts() {
 }
 
 function applyFilter(filter) {
-  brandFilter = filter;
+  brandFilter = canonicalBrandKey(filter);
+  try {
+    sessionStorage.setItem(BRAND_FILTER_STORAGE_KEY, brandFilter);
+  } catch {
+    /* ignore */
+  }
   document.querySelectorAll(".filter-btn").forEach((b) => {
-    b.classList.toggle("active", b.dataset.filter === filter);
+    b.classList.toggle("active", canonicalBrandKey(b.dataset.filter) === brandFilter);
   });
+  syncBrandTilesUI();
   syncProductVisibility();
   revealVisibleCardsQuick();
 }
@@ -412,20 +498,49 @@ function bindCartListEvents() {
       if (minus) changeCartQty(minus.dataset.lineId, -1);
       if (plus) changeCartQty(plus.dataset.lineId, 1);
     });
+    list.addEventListener("change", (e) => {
+      const inp = e.target.closest(".cart-qty-input");
+      if (!inp) return;
+      setCartQty(inp.dataset.lineId, inp.value);
+    });
+    list.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      const inp = e.target.closest(".cart-qty-input");
+      if (!inp) return;
+      inp.blur();
+    });
   }
+}
+
+function ensureCartShipProgressEl() {
+  let wrap = document.getElementById("cartShipProgressWrap");
+  if (wrap) return wrap;
+  const row = document.getElementById("cartShipRow");
+  if (!row?.parentNode) return null;
+  wrap = document.createElement("div");
+  wrap.className = "cart-ship-progress";
+  wrap.id = "cartShipProgressWrap";
+  wrap.hidden = true;
+  wrap.innerHTML =
+    '<div class="cart-ship-progress__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Tiến độ đạt miễn phí vận chuyển"><div class="cart-ship-progress__fill" id="cartShipProgressBar"></div></div>';
+  row.after(wrap);
+  return wrap;
 }
 
 function updateCartUI() {
   const badge = document.getElementById("cartBadge");
   const list = document.getElementById("cartList");
+  if (!list) return;
   const totalEl = document.getElementById("cartTotal");
   const subEl = document.getElementById("cartSubtotal");
   const shipEl = document.getElementById("cartShipFee");
   const shipHint = document.getElementById("cartShipHint");
   const drawerCount = document.getElementById("cartDrawerCount");
   const clearBtn = document.getElementById("cartClearBtn");
+  const checkoutBtn = document.getElementById("checkoutBtn");
 
   const n = cartCount();
+  const lines = cart.length;
   const sub = cartSubtotal();
   const ship = cartShipping(sub);
   const grand = sub + ship;
@@ -433,15 +548,25 @@ function updateCartUI() {
   badge.textContent = n;
   badge.style.display = n ? "grid" : "none";
 
-  if (drawerCount) drawerCount.textContent = n ? `(${n})` : "";
+  if (drawerCount) {
+    if (!n) drawerCount.textContent = "";
+    else if (lines === 1) drawerCount.textContent = `(${n} món)`;
+    else drawerCount.textContent = `(${lines} loại · ${n} món)`;
+  }
+
+  if (checkoutBtn) checkoutBtn.disabled = !cart.length;
 
   if (clearBtn) {
     clearBtn.hidden = !cart.length;
   }
 
+  const shipProg = ensureCartShipProgressEl();
+  const shipFill = document.getElementById("cartShipProgressBar");
+
   if (!cart.length) {
     list.innerHTML = '<li class="cart-empty">Giỏ hàng đang trống.<br /><span class="cart-empty__hint">Thêm sản phẩm để xem phí ship &amp; tổng tiền.</span></li>';
     if (shipHint) shipHint.textContent = "";
+    if (shipProg) shipProg.hidden = true;
   } else {
     list.innerHTML = cart
       .map((c) => {
@@ -449,17 +574,23 @@ function updateCartUI() {
         const thumbSrc = cartItemImgSrc(c.image);
         const lk = escapeHtml(cartLineKey(c));
         const vLabel = c.variantLabel ? `<p class="cart-item__variant">${escapeHtml(c.variantLabel)}</p>` : "";
+        const href = c.slug ? cartProductHref(c.slug) : "";
+        const titleInner = href
+          ? `<a class="cart-item__title-link" href="${escapeHtml(href)}">${escapeHtml(c.name)}</a>`
+          : escapeHtml(c.name);
         return `
       <li class="cart-item">
+        ${href ? `<a class="cart-item__media" href="${escapeHtml(href)}" aria-label="Xem ${escapeHtml(c.name)}">` : '<div class="cart-item__media">'}
         <img src="${thumbSrc}" alt="" class="cart-item__thumb" width="72" height="72" loading="lazy" decoding="async" />
+        ${href ? "</a>" : "</div>"}
         <div class="cart-item__body">
-          <h4 class="cart-item__title">${escapeHtml(c.name)}</h4>
+          <h4 class="cart-item__title">${titleInner}</h4>
           ${vLabel}
           <p class="cart-item__unit">${formatPrice(c.price)} / sản phẩm</p>
           <div class="cart-item__row">
             <div class="qty-stepper" role="group" aria-label="Số lượng">
               <button type="button" class="qty-btn qty-btn--minus" data-line-id="${lk}" aria-label="Giảm">−</button>
-              <span class="qty-val">${c.qty}</span>
+              <input type="number" class="cart-qty-input" inputmode="numeric" min="1" max="99" value="${c.qty}" data-line-id="${lk}" aria-label="Số lượng" />
               <button type="button" class="qty-btn qty-btn--plus" data-line-id="${lk}" aria-label="Tăng">+</button>
             </div>
             <strong class="cart-item__line">${formatPrice(line)}</strong>
@@ -478,6 +609,21 @@ function updateCartUI() {
       } else {
         const need = FREE_SHIP_THRESHOLD - sub;
         shipHint.textContent = `Mua thêm ${formatPrice(need)} để được miễn phí ship.`;
+      }
+    }
+
+    if (shipProg && shipFill) {
+      shipProg.hidden = false;
+      const pct =
+        sub >= FREE_SHIP_THRESHOLD ? 100 : Math.max(0, Math.min(100, Math.round((sub / FREE_SHIP_THRESHOLD) * 100)));
+      shipFill.style.width = `${pct}%`;
+      const track = shipProg.querySelector(".cart-ship-progress__track");
+      if (track) {
+        track.setAttribute("aria-valuenow", String(pct));
+        track.setAttribute(
+          "aria-label",
+          pct >= 100 ? "Đã đạt miễn phí vận chuyển" : `Đã đạt ${pct}% ngưỡng miễn phí ship`
+        );
       }
     }
   }
@@ -540,6 +686,76 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
+/** Gợi ý PDP: cùng hãng trước, bổ sung hãng khác; trong mỗi nhóm ưu tiên gần mức giá thấp nhất của máy đang xem. */
+function pickRelatedProducts(currentProduct, limit = 4) {
+  const ref = productMinPrice(currentProduct);
+  const priceDist = (x) => Math.abs(productMinPrice(x) - ref);
+  const tieBreak = (a, b) => a.name.localeCompare(b.name, "vi");
+  const others = products.filter((x) => x.id !== currentProduct.id);
+  const sameBrand = others.filter((x) => x.brand === currentProduct.brand);
+  const otherBrand = others.filter((x) => x.brand !== currentProduct.brand);
+  sameBrand.sort((a, b) => priceDist(a) - priceDist(b) || tieBreak(a, b));
+  otherBrand.sort((a, b) => priceDist(a) - priceDist(b) || tieBreak(a, b));
+  const out = [];
+  for (const x of sameBrand) {
+    if (out.length >= limit) break;
+    out.push(x);
+  }
+  for (const x of otherBrand) {
+    if (out.length >= limit) break;
+    out.push(x);
+  }
+  return out;
+}
+
+function collectPdpGalleryUrls(p, storage) {
+  const urls = [];
+  const seen = new Set();
+  const push = (rel) => {
+    if (!rel) return;
+    const u = pdpAsset(rel);
+    if (seen.has(u)) return;
+    seen.add(u);
+    urls.push(u);
+  };
+  for (const col of storage.colors || []) {
+    push(col.photo || p.photo);
+  }
+  if (p.photoHover) push(p.photoHover);
+  if (!urls.length) push(p.photo);
+  return urls;
+}
+
+function pdpRelatedProductCardHtml(p) {
+  const { main, hover } = productImageSet(p);
+  const mainSrc = pdpAsset(main);
+  const hoverSrc = hover ? pdpAsset(hover) : null;
+  const hoverLayer = hoverSrc
+    ? `<img class="product-card__img product-card__img--hover" src="${hoverSrc}" alt="" loading="lazy" decoding="async" width="800" height="600" aria-hidden="true" />`
+    : "";
+  const px = productHasVariantUI(p)
+    ? `<span class="product-card__price-from">Chỉ từ</span> ${formatPrice(productMinPrice(p))}`
+    : formatPrice(productMinPrice(p));
+  return `
+    <article class="product-card product-card--related${hoverSrc ? " has-hover-img" : ""}" data-brand="${p.brand}" role="listitem">
+      <a class="product-card__media" href="${p.slug}.html" aria-label="Xem ${escapeHtml(p.name)}">
+        <img class="product-card__img product-card__img--main" src="${mainSrc}" alt="${escapeHtml(p.name)}" loading="lazy" decoding="async" width="800" height="600" />
+        ${hoverLayer}
+      </a>
+      <div class="product-card__body">
+        <p class="product-card__brand">${brandLabel(p.brand)}</p>
+        <h3><a class="product-card__title-link" href="${p.slug}.html">${escapeHtml(p.name)}</a></h3>
+        <p class="product-card__meta">Trả góp 0% · Giao nhanh · Bảo hành chính hãng</p>
+        <p class="product-card__price">${px}</p>
+        <div class="product-card__actions">
+          <a class="btn btn--ghost btn--sm" href="${p.slug}.html">Chi tiết</a>
+          <button type="button" class="btn btn--primary btn--sm add-cart" data-id="${p.id}">Thêm vào giỏ</button>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
 function initProductDetailPage() {
   const root = document.querySelector("[data-product-slug]");
   if (!root) return;
@@ -557,17 +773,14 @@ function initProductDetailPage() {
   const v0 = getDefaultVariantSelection(p);
 
   document.title = `${p.name} | Rio Store`;
-  const mainUrl = pdpAsset(p.photo);
-  const hoverUrl = p.photoHover ? pdpAsset(p.photoHover) : null;
+  const mainUrl = pdpAsset((v0.color && v0.color.photo) || p.photo);
   const highlights = (p.highlights || []).map((t) => `<li>${escapeHtml(t)}</li>`).join("");
 
-  const thumbs = [
-    `<button type="button" class="pdp-thumb is-active" data-src="${mainUrl}" aria-label="Ảnh 1"><img src="${mainUrl}" alt="" width="80" height="80" loading="lazy" decoding="async" /></button>`,
-  ];
-  if (hoverUrl) {
-    thumbs.push(
-      `<button type="button" class="pdp-thumb" data-src="${hoverUrl}" aria-label="Ảnh 2"><img src="${hoverUrl}" alt="" width="80" height="80" loading="lazy" decoding="async" /></button>`
-    );
+  let selGb = v0.storageGb;
+  let selColorKey = v0.colorKey;
+
+  function currentStorage() {
+    return storages.find((s) => s.gb === selGb) || storages[0];
   }
 
   const storageButtonsHtml = storages
@@ -581,34 +794,17 @@ function initProductDetailPage() {
   const colorsHtml = (storage) =>
     storage.colors
       .map((c) => {
-        const active = c.key === v0.colorKey ? " is-active" : "";
+        const active = c.key === selColorKey ? " is-active" : "";
         const hx = c.hex ? escapeHtml(c.hex) : "#888888";
-        return `<button type="button" class="pdp-color-btn${active}" data-color="${escapeHtml(c.key)}" title="${escapeHtml(c.name)}" aria-pressed="${c.key === v0.colorKey}">
+        return `<button type="button" class="pdp-color-btn${active}" data-color="${escapeHtml(c.key)}" title="${escapeHtml(c.name)}" aria-pressed="${c.key === selColorKey}">
         <span class="pdp-color-swatch" style="--pdp-swatch:${hx}"></span>
         <span class="pdp-color-name">${escapeHtml(c.name)}</span>
       </button>`;
       })
       .join("");
 
-  let related = products.filter((x) => x.id !== p.id && x.brand === p.brand).slice(0, 3);
-  if (related.length === 0) related = products.filter((x) => x.id !== p.id).slice(0, 3);
-
-  const relatedHtml = related
-    .map((x) => {
-      const img = pdpAsset(x.photo);
-      const px = productHasVariantUI(x)
-        ? `<span class="product-card__price-from">Chỉ từ</span> ${formatPrice(productMinPrice(x))}`
-        : formatPrice(productMinPrice(x));
-      return `<article class="product-card product-card--static product-card--compact">
-        <a href="${x.slug}.html" class="product-card__media"><img src="${img}" alt="${escapeHtml(x.name)}" loading="lazy" width="400" height="300" /></a>
-        <div class="product-card__body">
-          <p class="product-card__brand">${brandLabel(x.brand)}</p>
-          <h3><a class="product-card__title-link" href="${x.slug}.html">${escapeHtml(x.name)}</a></h3>
-          <p class="product-card__price">${px}</p>
-        </div>
-      </article>`;
-    })
-    .join("");
+  const related = pickRelatedProducts(p, 4);
+  const relatedHtml = related.map((x) => pdpRelatedProductCardHtml(x)).join("");
 
   const variantBlockHtml = showVariantPickers
     ? `<div class="pdp-variants" id="pdpVariants">
@@ -628,7 +824,7 @@ function initProductDetailPage() {
       <nav class="breadcrumb" aria-label="Danh mục">
         <a href="../index.html">Trang chủ</a>
         <span class="breadcrumb__sep" aria-hidden="true">/</span>
-        <a href="../index.html#san-pham">Điện thoại</a>
+        <a href="../index.html#san-pham" id="pdpBreadcrumbPhones" title="Về danh sách — lọc theo ${escapeHtml(brandLabel(p.brand))}">Điện thoại</a>
         <span class="breadcrumb__sep" aria-hidden="true">/</span>
         <span class="breadcrumb__current">${escapeHtml(p.name)}</span>
       </nav>
@@ -637,7 +833,7 @@ function initProductDetailPage() {
           <div class="pdp-gallery__main pdp-gallery__main--shine">
             <img id="pdpMainImg" class="pdp-main-photo" src="${mainUrl}" alt="${escapeHtml(p.name)}" width="900" height="675" decoding="async" />
           </div>
-          <div class="pdp-gallery__thumbs" role="tablist">${thumbs.join("")}</div>
+          <div class="pdp-gallery__thumbs" role="tablist" id="pdpThumbs"></div>
         </div>
         <div class="pdp-buy">
           <p class="pdp-buy__brand">${brandLabel(p.brand)} · Chính hãng</p>
@@ -646,7 +842,9 @@ function initProductDetailPage() {
           <p class="pdp-buy__sku">Mã: <strong id="pdpSku">${escapeHtml(v0.sku)}</strong></p>
           <p class="pdp-buy__price" id="pdpPrice">${formatPrice(v0.price)}</p>
           ${variantBlockHtml}
-          <p class="pdp-buy__promo">Giao nhanh · Miễn phí ship đơn từ 2.000.000₫ · Trả góp 0% qua thẻ</p>
+          <p class="pdp-buy__promo">Giao nhanh · Miễn phí ship đơn từ ${formatPrice(
+            FREE_SHIP_THRESHOLD
+          )} · Trả góp 0% qua thẻ</p>
           <ul class="pdp-highlights">${highlights}</ul>
           <div class="pdp-trust">
             <span>Bảo hành 12 tháng</span>
@@ -660,22 +858,57 @@ function initProductDetailPage() {
         </div>
       </div>
       <section class="pdp-related" aria-labelledby="pdp-related-title">
-        <h2 id="pdp-related-title" class="pdp-related__title">Có thể bạn cũng thích</h2>
-        <div class="products products--related">${relatedHtml}</div>
+        <div class="pdp-related__intro">
+          <h2 id="pdp-related-title" class="pdp-related__title">Sản phẩm liên quan</h2>
+          <p class="pdp-related__subtitle">Ưu tiên cùng thương hiệu, sau đó các hãng khác; trong mỗi nhóm sắp xếp theo mức giá gần với máy bạn đang xem.</p>
+        </div>
+        <div class="products products--related" role="list">${relatedHtml}</div>
       </section>
+      <div class="pdp-sticky-cta" id="pdpStickyCta" aria-hidden="true">
+        <div class="pdp-sticky-cta__inner">
+          <div class="pdp-sticky-cta__info">
+            <p class="pdp-sticky-cta__name">${escapeHtml(p.name)}</p>
+            <p class="pdp-sticky-cta__price" id="pdpStickyPrice">${formatPrice(v0.price)}</p>
+          </div>
+          <button type="button" class="btn btn--primary pdp-sticky-cta__btn" id="pdpStickyAdd">Thêm vào giỏ</button>
+        </div>
+      </div>
     </div>
   `;
 
-  const mainImg = document.getElementById("pdpMainImg");
-  mount.querySelectorAll(".pdp-thumb").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (!mainImg) return;
-      const nextSrc = btn.dataset.src;
-      if (mainImg.getAttribute("src") === nextSrc) {
-        mount.querySelectorAll(".pdp-thumb").forEach((b) => b.classList.remove("is-active"));
-        btn.classList.add("is-active");
-        return;
-      }
+  mount.querySelectorAll(".products--related .add-cart").forEach((btn) => {
+    btn.addEventListener("click", () => addToCart(btn.dataset.id));
+  });
+
+  document.getElementById("pdpBreadcrumbPhones")?.addEventListener("click", () => {
+    try {
+      sessionStorage.setItem(BRAND_FILTER_STORAGE_KEY, canonicalBrandKey(p.brand));
+    } catch {
+      /* ignore */
+    }
+  });
+
+  function renderPdpThumbs(activeSrc) {
+    const thumbsRoot = mount.querySelector("#pdpThumbs");
+    if (!thumbsRoot) return;
+    const s = currentStorage();
+    const urls = collectPdpGalleryUrls(p, s);
+    const active = activeSrc && urls.includes(activeSrc) ? activeSrc : urls[0];
+    thumbsRoot.innerHTML = urls
+      .map((src) => {
+        const activeCls = src === active ? " is-active" : "";
+        const esc = escapeHtml(src);
+        return `<button type="button" class="pdp-thumb${activeCls}" data-src="${esc}" aria-label="Xem ảnh"><img src="${esc}" alt="" width="80" height="80" loading="lazy" decoding="async" /></button>`;
+      })
+      .join("");
+  }
+
+  function setMainPhoto(nextSrc) {
+    const mainImg = document.getElementById("pdpMainImg");
+    if (!mainImg || !nextSrc) return;
+
+    const cur = mainImg.getAttribute("src");
+    if (cur !== nextSrc) {
       const onLoaded = () => {
         mainImg.style.opacity = "";
         mainImg.style.transition = "";
@@ -686,49 +919,38 @@ function initProductDetailPage() {
         mainImg.addEventListener("load", onLoaded, { once: true });
       }
       mainImg.src = nextSrc;
-      mount.querySelectorAll(".pdp-thumb").forEach((b) => b.classList.remove("is-active"));
-      btn.classList.add("is-active");
       if (prefersReducedMotion()) onLoaded();
-    });
-  });
-
-  let selGb = v0.storageGb;
-  let selColorKey = v0.colorKey;
-
-  function currentStorage() {
-    return storages.find((s) => s.gb === selGb) || storages[0];
+    }
+    renderPdpThumbs(nextSrc);
   }
+
+  const thumbsRoot = mount.querySelector("#pdpThumbs");
+  if (thumbsRoot && !thumbsRoot.dataset.delegated) {
+    thumbsRoot.dataset.delegated = "1";
+    thumbsRoot.addEventListener("click", (e) => {
+      const btn = e.target.closest(".pdp-thumb");
+      if (!btn) return;
+      setMainPhoto(btn.dataset.src);
+    });
+  }
+
+  setMainPhoto(mainUrl);
 
   function paintVariant() {
     const s = currentStorage();
     const col = s.colors.find((c) => c.key === selColorKey) || s.colors[0];
     selColorKey = col.key;
     const v = resolveVariantInner(p, s, col);
-     document.getElementById("pdpPrice").textContent = formatPrice(v.price);
-  document.getElementById("pdpSku").textContent = v.sku;
-  document.getElementById("pdpVariantLabel").textContent = v.label;
-
-  // 👉 THÊM ĐOẠN NÀY
-  if (mainImg) {
-    const nextImg = col.img || p.photo;
-
-    if (!prefersReducedMotion()) {
-      mainImg.style.transition = "opacity 0.2s ease";
-      mainImg.style.opacity = "0.6";
-      mainImg.onload = () => {
-        mainImg.style.opacity = "1";
-      };
-    }
-
-    mainImg.src = pdpAsset(nextImg);
-  }
-
     const priceEl = document.getElementById("pdpPrice");
     const skuEl = document.getElementById("pdpSku");
     const labelEl = document.getElementById("pdpVariantLabel");
     if (priceEl) priceEl.textContent = formatPrice(v.price);
     if (skuEl) skuEl.textContent = v.sku;
     if (labelEl) labelEl.textContent = v.label;
+    const stickyPrice = document.getElementById("pdpStickyPrice");
+    if (stickyPrice) stickyPrice.textContent = formatPrice(v.price);
+
+    setMainPhoto(pdpAsset(col.photo || p.photo));
 
     mount.querySelectorAll(".pdp-storage-btn").forEach((b) => {
       const g = b.dataset.gb === "" ? null : Number(b.dataset.gb);
@@ -773,9 +995,30 @@ function initProductDetailPage() {
     if (labelEl) labelEl.hidden = true;
   }
 
-  document.getElementById("pdpAddCart")?.addEventListener("click", () => {
-    addToCart(p.id, { storageGb: selGb, colorKey: selColorKey });
-  });
+  const addToCartPdp = () => addToCart(p.id, { storageGb: selGb, colorKey: selColorKey });
+
+  document.getElementById("pdpAddCart")?.addEventListener("click", addToCartPdp);
+  document.getElementById("pdpStickyAdd")?.addEventListener("click", addToCartPdp);
+
+  const addBtn = document.getElementById("pdpAddCart");
+  const sticky = document.getElementById("pdpStickyCta");
+  const mq = typeof matchMedia !== "undefined" ? matchMedia("(max-width: 900px)") : null;
+  if (sticky && addBtn && mq && "IntersectionObserver" in window) {
+    const syncSticky = (entries) => {
+      const e = entries[0];
+      const show = Boolean(mq.matches && e && !e.isIntersecting);
+      sticky.classList.toggle("is-visible", show);
+      sticky.setAttribute("aria-hidden", show ? "false" : "true");
+    };
+    const io = new IntersectionObserver(syncSticky, { threshold: 0, rootMargin: "0px 0px -48px 0px" });
+    io.observe(addBtn);
+    mq.addEventListener("change", () => {
+      if (!mq.matches) {
+        sticky.classList.remove("is-visible");
+        sticky.setAttribute("aria-hidden", "true");
+      }
+    });
+  }
 }
 
 function authModalOpen(id) {
@@ -893,7 +1136,11 @@ function initAuthModal() {
     const authOpen =
       document.getElementById("loginModal")?.classList.contains("is-open") ||
       document.getElementById("registerModal")?.classList.contains("is-open");
-    if (authOpen) closeAllAuthModals();
+    if (authOpen) {
+      closeAllAuthModals();
+      return;
+    }
+    if (document.getElementById("cartDrawer")?.classList.contains("is-open")) closeCart();
   });
 }
 
@@ -1018,7 +1265,17 @@ loadCart();
 const isProductDetailPage = Boolean(document.querySelector("[data-product-slug]"));
 
 if (document.getElementById("productGrid")) {
+  try {
+    const saved = sessionStorage.getItem(BRAND_FILTER_STORAGE_KEY);
+    if (saved) brandFilter = canonicalBrandKey(saved);
+  } catch {
+    /* ignore */
+  }
   renderProducts();
+  document.querySelectorAll(".filter-btn").forEach((b) => {
+    b.classList.toggle("active", canonicalBrandKey(b.dataset.filter) === brandFilter);
+  });
+  syncBrandTilesUI();
 }
 if (isProductDetailPage) {
   initProductDetailPage();
@@ -1050,6 +1307,16 @@ document.getElementById("cartClearBtn")?.addEventListener("click", () => {
   if (cart.length && confirm("Xóa toàn bộ sản phẩm trong giỏ?")) clearCart();
 });
 
+document.getElementById("cartContinueBtn")?.addEventListener("click", () => {
+  closeCart();
+  const section = document.getElementById("san-pham");
+  if (section) {
+    section.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    return;
+  }
+  window.location.href = needsAssetParent() ? "../index.html#san-pham" : "index.html#san-pham";
+});
+
 document.getElementById("checkoutBtn")?.addEventListener("click", () => {
   if (!cart.length) return;
   const who = getSession()?.name;
@@ -1078,4 +1345,19 @@ if (menuToggle && nav) {
   });
 }
 
-
+function initBrandJumpTiles() {
+  if (!document.getElementById("productGrid")) return;
+  document.querySelectorAll("[data-brand-jump]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      const f = el.dataset.brandJump;
+      if (f == null) return;
+      e.preventDefault();
+      applyFilter(f);
+      document.getElementById("san-pham")?.scrollIntoView({
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+      });
+      nav?.classList.remove("is-open");
+    });
+  });
+}
+initBrandJumpTiles();
